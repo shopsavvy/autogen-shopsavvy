@@ -20,14 +20,28 @@ classifiers = [
     "Intended Audience :: Developers",
 ]
 dependencies = [
-    "autogen-core>=0.4.0",
-    "shopsavvy-sdk>=0.1.0",
+    "autogen-core>=0.4.2",  # 0.4.0/0.4.1 are yanked (unintended GPL dependency)
+    # search_products() and the ProductSearchResult / ProductWithOffers
+    # models the tools read arrived in shopsavvy-sdk 1.0.3.
+    "shopsavvy-sdk>=1.0.3",
     "pydantic>=2.0.0",
 ]
 
+[project.optional-dependencies]
+test = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.23",
+]
+
 [project.urls]
-Homepage = "https://github.com/shopsavvy/autogen-shopsavvy"
-Documentation = "https://shopsavvy.com/data"
+Homepage = "https://shopsavvy.com/integrations/autogen"
+Repository = "https://github.com/shopsavvy/autogen-shopsavvy"
+Documentation = "https://shopsavvy.com/data/documentation"
+"Bug Tracker" = "https://github.com/shopsavvy/autogen-shopsavvy/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/autogen_shopsavvy"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
