@@ -21,9 +21,11 @@ classifiers = [
 ]
 dependencies = [
     "autogen-core>=0.4.2",  # 0.4.0/0.4.1 are yanked (unintended GPL dependency)
-    # search_products() and the ProductSearchResult / ProductWithOffers
-    # models the tools read arrived in shopsavvy-sdk 1.0.3.
-    "shopsavvy-sdk>=1.0.3",
+    # 1.4.0 is the first release whose get_price_history() parses the real
+    # /products/offers/history response (product -> offers -> history, with
+    # PriceHistoryEntry points); older releases raise a ValidationError on
+    # every 200.
+    "shopsavvy-sdk>=1.4.0,<2",
     "pydantic>=2.0.0",
 ]
 
