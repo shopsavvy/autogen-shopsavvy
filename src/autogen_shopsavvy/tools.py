@@ -1,11 +1,28 @@
 """ShopSavvy tools for Microsoft AutoGen agents."""
 
-from typing import Any, Optional, Sequence
+import asyncio
+from typing import Any, Callable, Optional, TypeVar
 
 from autogen_core import CancellationToken
 from autogen_core.tools import BaseTool
 from pydantic import BaseModel, Field
 from shopsavvy import ShopSavvyConfig, ShopSavvyDataAPI
+
+T = TypeVar("T")
+
+
+async def _run_blocking(
+    cancellation_token: CancellationToken, fn: Callable[..., T], *args: Any, **kwargs: Any
+) -> T:
+    """Run a blocking SDK call off the event loop, honouring the cancellation token.
+
+    The ShopSavvy SDK is synchronous (httpx.Client). Calling it directly from
+    an async tool's run() blocked the agent runtime's event loop for the whole
+    HTTP round trip, stalling every other agent and tool running concurrently.
+    """
+    future = asyncio.ensure_future(asyncio.to_thread(fn, *args, **kwargs))
+    cancellation_token.link_future(future)
+    return await future
 
 
 class ProductSearchInput(BaseModel):
@@ -45,7 +62,9 @@ class ProductSearchTool(BaseTool[ProductSearchInput, ProductSearchOutput]):
     async def run(
         self, args: ProductSearchInput, cancellation_token: CancellationToken
     ) -> ProductSearchOutput:
-        result = self._client.search_products(args.query, limit=args.limit)
+        result = await _run_blocking(
+            cancellation_token, self._client.search_products, args.query, limit=args.limit
+        )
         products = []
         for p in result.data:
             products.append(
@@ -59,10 +78,7 @@ class ProductSearchTool(BaseTool[ProductSearchInput, ProductSearchOutput]):
                     "images": getattr(p, "images", None),
                 }
             )
-        return ProductSearchOutput(
-            products=products,
-            total=result.pagination.total if hasattr(result, "pagination") else len(products),
-        )
+        return ProductSearchOutput(products=products, total=result.pagination.total)
 
 
 class PriceComparisonInput(BaseModel):
@@ -116,8 +132,19 @@ class PriceComparisonTool(BaseTool[PriceComparisonInput, PriceComparisonOutput])
     async def run(
         self, args: PriceComparisonInput, cancellation_token: CancellationToken
     ) -> PriceComparisonOutput:
-        retailer_filter = {"retailer": args.retailer} if args.retailer else {}
-        result = self._client.get_current_offers(args.identifier, **retailer_filter)
+        if args.include_history and not (args.history_start and args.history_end):
+            # Previously this silently returned history=None, which an agent
+            # cannot distinguish from "no history exists".
+            raise ValueError(
+                "include_history requires both history_start and history_end (YYYY-MM-DD)"
+            )
+
+        result = await _run_blocking(
+            cancellation_token,
+            self._client.get_current_offers,
+            args.identifier,
+            retailer=args.retailer,
+        )
 
         product_title = None
         offers = []
@@ -125,7 +152,13 @@ class PriceComparisonTool(BaseTool[PriceComparisonInput, PriceComparisonOutput])
         if result.data:
             product = result.data[0]
             product_title = product.title
-            for o in getattr(product, "offers", []):
+            # Cheapest first (offers without a price last), as the tool
+            # description promises.
+            sorted_offers = sorted(
+                product.offers,
+                key=lambda o: (o.price is None, o.price if o.price is not None else 0.0),
+            )
+            for o in sorted_offers:
                 offers.append(
                     {
                         "retailer": getattr(o, "retailer", None),
@@ -138,9 +171,14 @@ class PriceComparisonTool(BaseTool[PriceComparisonInput, PriceComparisonOutput])
                 )
 
         history = None
-        if args.include_history and args.history_start and args.history_end:
-            history_result = self._client.get_price_history(
-                args.identifier, args.history_start, args.history_end
+        if args.include_history:
+            history_result = await _run_blocking(
+                cancellation_token,
+                self._client.get_price_history,
+                args.identifier,
+                args.history_start,
+                args.history_end,
+                retailer=args.retailer,
             )
             history = []
             for entry in history_result.data:
