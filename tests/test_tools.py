@@ -61,16 +61,22 @@ RESPONSES = {
             dict(
                 PRODUCT,
                 offers=[
+                    # Exact wire shape: newest point first; `availability` is
+                    # omitted when unknown; `currency` is null on an archived
+                    # point with no recorded currency.
                     dict(
                         OFFERS[1],
                         history=[
-                            {"timestamp": "2026-08-01T00:00:00Z", "price": 348.0, "currency": "USD", "availability": "in"},
-                            {"timestamp": "2026-08-15T00:00:00Z", "price": 298.0, "currency": "USD", "availability": "in"},
+                            {"availability": "in", "price": 298.0, "currency": "USD", "timestamp": "2026-08-15T00:00:00Z"},
+                            {"availability": "out", "price": 348.0, "currency": "USD", "timestamp": "2026-08-01T00:00:00Z"},
+                            {"price": 349.99, "currency": None, "timestamp": "2026-07-20T00:00:00Z"},
                         ],
-                    )
+                    ),
+                    dict(OFFERS[0], history=[]),
                 ],
             )
         ],
+        "meta": {"request_id": "req-7f3c9a", "credits_used": 2, "credits_remaining": 998, "rate_limit_remaining": 999},
     },
 }
 
@@ -249,7 +255,34 @@ async def test_compare_prices_with_history(recorder):
         CancellationToken(),
     )
 
-    assert [h["price"] for h in result.history] == [348.0, 298.0]
+    assert result.history == [
+        {
+            "retailer": "Amazon",
+            "condition": "new",
+            "timestamp": "2026-08-15T00:00:00Z",
+            "price": 298.0,
+            "currency": "USD",
+            "availability": "in",
+        },
+        {
+            "retailer": "Amazon",
+            "condition": "new",
+            "timestamp": "2026-08-01T00:00:00Z",
+            "price": 348.0,
+            "currency": "USD",
+            "availability": "out",
+        },
+        {
+            "retailer": "Amazon",
+            "condition": "new",
+            "timestamp": "2026-07-20T00:00:00Z",
+            "price": 349.99,
+            "currency": None,
+            "availability": None,
+        },
+    ]
+    # Current offers are still fetched first, then the history.
+    assert [r.url.path for r in recorder.requests] == ["/v1/products/offers", "/v1/products/offers/history"]
     path, params = recorder.params()
     assert path == "/v1/products/offers/history"
-    assert params["ids"] == "B09XS7JWHH"
+    assert params == {"ids": "B09XS7JWHH", "start": "2026-08-01", "end": "2026-08-31"}

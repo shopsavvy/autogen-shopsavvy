@@ -107,7 +107,12 @@ class PriceComparisonOutput(BaseModel):
     product_title: Optional[str] = Field(description="Product title")
     offers: list[dict[str, Any]] = Field(description="Current offers from retailers")
     history: Optional[list[dict[str, Any]]] = Field(
-        default=None, description="Price history entries"
+        default=None,
+        description=(
+            "Price history, one entry per observed price point: retailer, condition, "
+            "timestamp (ISO-8601), price, currency and availability. Points are newest "
+            "first within each retailer's offer."
+        ),
     )
 
 
@@ -180,16 +185,26 @@ class PriceComparisonTool(BaseTool[PriceComparisonInput, PriceComparisonOutput])
                 args.history_end,
                 retailer=args.retailer,
             )
+            # GET /products/offers/history returns one entry per product, each
+            # with its ``offers``, and each offer with its own ``history`` of
+            # PriceHistoryEntry points (newest first). Flatten that into one row
+            # per price point, tagged with the retailer it was observed at.
             history = []
-            for entry in history_result.data:
-                for h in getattr(entry, "price_history", []):
-                    history.append(
-                        {
-                            "date": h.get("date") if isinstance(h, dict) else getattr(h, "date", None),
-                            "price": h.get("price") if isinstance(h, dict) else getattr(h, "price", None),
-                            "availability": h.get("availability") if isinstance(h, dict) else getattr(h, "availability", None),
-                        }
-                    )
+            for product in history_result.data:
+                for offer in product.offers:
+                    for point in offer.history:
+                        history.append(
+                            {
+                                "retailer": offer.retailer,
+                                "condition": offer.condition,
+                                "timestamp": point.timestamp,
+                                "price": point.price,
+                                # None on an archived point with no recorded
+                                # currency — never assume USD.
+                                "currency": point.currency,
+                                "availability": point.availability,
+                            }
+                        )
 
         return PriceComparisonOutput(
             product_title=product_title,
