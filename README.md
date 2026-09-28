@@ -18,6 +18,8 @@ export SHOPSAVVY_API_KEY=ss_live_your_key_here
 
 ## Usage
 
+The example below also uses AutoGen's agent layer and OpenAI model client (`pip install autogen-agentchat "autogen-ext[openai]"`).
+
 ```python
 import os
 from autogen_agentchat.agents import AssistantAgent
@@ -44,24 +46,28 @@ agent = AssistantAgent(
 Search for products by keyword or look up details by barcode/ASIN/URL.
 
 ```python
+from autogen_core import CancellationToken
+
 tool = ProductSearchTool(api_key="ss_live_your_key_here")
 
 # Search by keyword
-result = await tool.run_json({"query": "sony headphones", "limit": 5}, None)
+result = await tool.run_json({"query": "sony headphones", "limit": 5}, CancellationToken())
 
 # Look up by identifier
-result = await tool.run_json({"query": "B09XS7JWHH"}, None)
+result = await tool.run_json({"query": "B09XS7JWHH"}, CancellationToken())
 ```
 
 ### PriceComparisonTool
 
-Get current offers from retailers for a product, with optional price history.
+Get current offers from retailers for a product (cheapest first), with optional price history. `include_history` requires both `history_start` and `history_end`.
 
 ```python
+from autogen_core import CancellationToken
+
 tool = PriceComparisonTool(api_key="ss_live_your_key_here")
 
 # Get current offers
-result = await tool.run_json({"identifier": "B09XS7JWHH"}, None)
+result = await tool.run_json({"identifier": "B09XS7JWHH"}, CancellationToken())
 
 # Get price history
 result = await tool.run_json({
@@ -69,8 +75,15 @@ result = await tool.run_json({
     "include_history": True,
     "history_start": "2024-01-01",
     "history_end": "2024-06-01",
-}, None)
+}, CancellationToken())
 ```
+
+Both tools call the ShopSavvy SDK in a worker thread, so they never block the agent runtime's event loop, and they stop waiting when the `CancellationToken` is cancelled.
+
+## Links
+
+- Integration page: [shopsavvy.com/integrations/autogen](https://shopsavvy.com/integrations/autogen)
+- Data API documentation: [shopsavvy.com/data/documentation](https://shopsavvy.com/data/documentation)
 
 ## License
 
