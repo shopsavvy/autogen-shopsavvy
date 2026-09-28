@@ -76,6 +76,22 @@ result = await tool.run_json({
     "history_start": "2024-01-01",
     "history_end": "2024-06-01",
 }, CancellationToken())
+
+for point in result.history:
+    print(point["retailer"], point["timestamp"], point["price"], point["currency"])
+```
+
+`result.history` has one entry per observed price point, newest first within each retailer's offer:
+
+```python
+{
+    "retailer": "Amazon",
+    "condition": "new",
+    "timestamp": "2024-05-28T14:02:11.000Z",
+    "price": 298.0,
+    "currency": "USD",       # None on an archived point with no recorded currency
+    "availability": "in",    # None when availability was not observed
+}
 ```
 
 Both tools call the ShopSavvy SDK in a worker thread, so they never block the agent runtime's event loop, and they stop waiting when the `CancellationToken` is cancelled.
