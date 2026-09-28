@@ -28,5 +28,12 @@ assert data['project']['name'] == 'autogen-shopsavvy'
 print('  pyproject.toml is valid')
 "
 
+echo "Running pytest..."
+if ! python3 -m pytest --version > /dev/null 2>&1; then
+  echo "  pytest is not installed. Install the test extra: pip install -e '.[test]'"
+  exit 1
+fi
+python3 -m pytest -v
+
 echo ""
 echo "All checks passed!"
